@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Teachable Machine - Exemplo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 20px;
+        }
+        /* O main-container agora é o contêiner principal de todo o conteúdo */
+        #main-container {
+            transition: background-color 0.5s ease;
+            min-height: 100vh; /* Garante que o contêiner ocupe a tela toda para a cor de fundo */
+            padding-top: 20px;
+        }
+        #webcam-container {
+            width: 300px;
+            height: 300px;
+            margin: auto;
+            background-color: #40f865;
+        }
+        button {
+            padding: 10px 20px;
+            margin-top: 20px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="main-container">
+        <h1>IA com Teachable Machine</h1>
+        <div id="webcam-container"></div>
+        <div id="label-container">Aguardando...</div>
+        <button id="toggleBtn">Ligar Câmera</button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+
+    <script>
+        const URL = "https://teachablemachine.withgoogle.com/models/u_fNTJydl/";
+        let model, webcam, loopRequest;
+
+        document.getElementById("toggleBtn").addEventListener("click", function () {
+            if (this.textContent === "Ligar Câmera") {
+                ligarCamera();
+                this.textContent = "Desligar Câmera";
+            } else {
+                desligarCamera();
+                this.textContent = "Ligar Câmera";
+            }
+        });
+
+        async function ligarCamera() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            try {
+                model = await tmImage.load(modelURL, metadataURL);
+                webcam = new tmImage.Webcam(300, 300, true);
+                await webcam.setup();
+                await webcam.play();
+                document.getElementById("webcam-container").appendChild(webcam.canvas);
+                loop();
+            } catch (error) {
+                console.error("Erro ao inicializar a câmera ou o modelo:", error);
+                document.getElementById("toggleBtn").textContent = "Ligar Câmera";
+            }
+        }
+
+        function desligarCamera() {
+            if (webcam) {
+                webcam.stop();
+                document.getElementById("webcam-container").innerHTML = "";
+                if (loopRequest) {
+                    window.cancelAnimationFrame(loopRequest);
+                }
+                document.getElementById("main-container").style.backgroundColor = 'white';
+                document.getElementById("label-container").innerText = "Aguardando...";
+            }
+        }
+
+        async function loop() {
+            if (webcam && webcam.canvas) {
+                webcam.update();
+                await predict();
+            }
+            loopRequest = window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+            if (!model || !webcam || !webcam.canvas) return;
+
+            try {
+                const prediction = await model.predict(webcam.canvas);
+                prediction.sort((a, b) => b.probability - a.probability);
+                const classeMaisProvavel = prediction[0];
+
+                const mainContainer = document.getElementById("main-container");
+                const prob = classeMaisProvavel.probability;
+
+                if (prob > 0.8) {
+                    if (classeMaisProvavel.className === "mão fechada") {
+                        mainContainer.style.backgroundColor = "black";
+                    } else if (classeMaisProvavel.className === "mão aberta") {
+                        mainContainer.style.backgroundColor = "blue";
+                    } else {
+                        mainContainer.style.backgroundColor = "white";
+                    }
+                } else {
+                    mainContainer.style.backgroundColor = "white";
+                }
+
+                document.getElementById("label-container").innerText =
+                    `${classeMaisProvavel.className} (${(classeMaisProvavel.probability * 100).toFixed(2)}%)`;
+
+                if (classeMaisProvavel.className === "mão fechada" && classeMaisProvavel.probability > 0.9) {
+                    alert("Você fechou a mão!");
+                }
+            } catch (error) {
+                console.error("Erro na predição: ", error);
+            }
+        }
+    </script>
+</body>
+</html>
